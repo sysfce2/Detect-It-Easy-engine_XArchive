@@ -283,6 +283,59 @@ QList<XBinary::DATA_HEADER> XXZ::getDataHeaders(const DATA_HEADERS_OPTIONS &data
     return listResult;
 }
 
+QList<XBinary::XFHEADER> XXZ::getXFHeaders(const XFSTRUCT &xfStruct, PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(pPdStruct)
+
+    QList<XBinary::XFHEADER> listResult;
+    quint32 nStructID = xfStruct.nStructID;
+
+    if (nStructID == STRUCTID_UNKNOWN) {
+        XFSTRUCT _xfStruct = xfStruct;
+        _xfStruct.nStructID = STRUCTID_STREAM_HEADER;
+        _xfStruct.xLoc = offsetToLoc(0);
+        listResult.append(getXFHeaders(_xfStruct, pPdStruct));
+    } else if (nStructID == STRUCTID_STREAM_HEADER) {
+        XLOC headerLoc = xfStruct.xLoc;
+        if (headerLoc.locType == LT_UNKNOWN) {
+            headerLoc = offsetToLoc(0);
+        }
+
+        qint64 nHeaderOffset = locToOffset(xfStruct.pMemoryMap, headerLoc);
+
+        if ((nHeaderOffset != -1) && isOffsetAndSizeValid(xfStruct.pMemoryMap, nHeaderOffset, sizeof(STREAM_HEADER))) {
+            XFHEADER xfHeader = {};
+            xfHeader.sParentTag = xfStruct.sParent;
+            xfHeader.fileType = xfStruct.fileType;
+            xfHeader.structID = static_cast<XBinary::STRUCTID>(STRUCTID_STREAM_HEADER);
+            xfHeader.xLoc = headerLoc;
+            xfHeader.nSize = sizeof(STREAM_HEADER);
+            xfHeader.xfType = XFTYPE_HEADER;
+            xfHeader.listFields = getXFRecords(xfStruct.fileType, STRUCTID_STREAM_HEADER, headerLoc);
+            xfHeader.sTag = xfHeaderToTag(xfHeader, structIDToString(STRUCTID_STREAM_HEADER), xfHeader.sParentTag);
+            listResult.append(xfHeader);
+        }
+    }
+
+    return listResult;
+}
+
+QList<XBinary::XFRECORD> XXZ::getXFRecords(FT fileType, quint32 nStructID, const XLOC &xLoc)
+{
+    Q_UNUSED(fileType)
+    Q_UNUSED(xLoc)
+
+    QList<XBinary::XFRECORD> listResult;
+
+    if (nStructID == STRUCTID_STREAM_HEADER) {
+        listResult.append({"header_magic", (qint32)offsetof(STREAM_HEADER, header_magic), 6, XFRECORD_FLAG_NONE, VT_BYTE_ARRAY});
+        listResult.append({"stream_flags", (qint32)offsetof(STREAM_HEADER, stream_flags), 2, XFRECORD_FLAG_NONE, VT_BYTE_ARRAY});
+        listResult.append({"crc32", (qint32)offsetof(STREAM_HEADER, crc32), 4, XFRECORD_FLAG_NONE, VT_UINT32});
+    }
+
+    return listResult;
+}
+
 XXZ::STREAM_HEADER XXZ::_read_STREAM_HEADER(qint64 nOffset)
 {
     STREAM_HEADER sh = {};

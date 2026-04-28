@@ -190,6 +190,57 @@ QList<XBinary::DATA_HEADER> XZstd::getDataHeaders(const DATA_HEADERS_OPTIONS &da
     return listResult;
 }
 
+QList<XBinary::XFHEADER> XZstd::getXFHeaders(const XFSTRUCT &xfStruct, PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(pPdStruct)
+
+    QList<XBinary::XFHEADER> listResult;
+    quint32 nStructID = xfStruct.nStructID;
+
+    if (nStructID == STRUCTID_UNKNOWN) {
+        XFSTRUCT _xfStruct = xfStruct;
+        _xfStruct.nStructID = STRUCTID_ZSTD_HEADER;
+        _xfStruct.xLoc = offsetToLoc(0);
+        listResult.append(getXFHeaders(_xfStruct, pPdStruct));
+    } else if (nStructID == STRUCTID_ZSTD_HEADER) {
+        XLOC headerLoc = xfStruct.xLoc;
+        if (headerLoc.locType == LT_UNKNOWN) {
+            headerLoc = offsetToLoc(0);
+        }
+
+        qint64 nHeaderOffset = locToOffset(xfStruct.pMemoryMap, headerLoc);
+
+        if ((nHeaderOffset != -1) && isOffsetAndSizeValid(xfStruct.pMemoryMap, nHeaderOffset, sizeof(ZSTD_HEADER))) {
+            XFHEADER xfHeader = {};
+            xfHeader.sParentTag = xfStruct.sParent;
+            xfHeader.fileType = xfStruct.fileType;
+            xfHeader.structID = static_cast<XBinary::STRUCTID>(STRUCTID_ZSTD_HEADER);
+            xfHeader.xLoc = headerLoc;
+            xfHeader.nSize = sizeof(ZSTD_HEADER);
+            xfHeader.xfType = XFTYPE_HEADER;
+            xfHeader.listFields = getXFRecords(xfStruct.fileType, STRUCTID_ZSTD_HEADER, headerLoc);
+            xfHeader.sTag = xfHeaderToTag(xfHeader, structIDToString(STRUCTID_ZSTD_HEADER), xfHeader.sParentTag);
+            listResult.append(xfHeader);
+        }
+    }
+
+    return listResult;
+}
+
+QList<XBinary::XFRECORD> XZstd::getXFRecords(FT fileType, quint32 nStructID, const XLOC &xLoc)
+{
+    Q_UNUSED(fileType)
+    Q_UNUSED(xLoc)
+
+    QList<XBinary::XFRECORD> listResult;
+
+    if (nStructID == STRUCTID_ZSTD_HEADER) {
+        listResult.append({"nMagic", (qint32)offsetof(ZSTD_HEADER, nMagic), 4, XFRECORD_FLAG_NONE, VT_UINT32});
+    }
+
+    return listResult;
+}
+
 QList<XBinary::FPART> XZstd::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(nLimit)

@@ -194,6 +194,58 @@ QList<XBinary::DATA_HEADER> XBZIP2::getDataHeaders(const DATA_HEADERS_OPTIONS &d
     return listResult;
 }
 
+QList<XBinary::XFHEADER> XBZIP2::getXFHeaders(const XFSTRUCT &xfStruct, PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(pPdStruct)
+
+    QList<XBinary::XFHEADER> listResult;
+    quint32 nStructID = xfStruct.nStructID;
+
+    if (nStructID == STRUCTID_UNKNOWN) {
+        XFSTRUCT _xfStruct = xfStruct;
+        _xfStruct.nStructID = STRUCTID_BZIP2_HEADER;
+        _xfStruct.xLoc = offsetToLoc(0);
+        listResult.append(getXFHeaders(_xfStruct, pPdStruct));
+    } else if (nStructID == STRUCTID_BZIP2_HEADER) {
+        XLOC headerLoc = xfStruct.xLoc;
+        if (headerLoc.locType == LT_UNKNOWN) {
+            headerLoc = offsetToLoc(0);
+        }
+
+        qint64 nHeaderOffset = locToOffset(xfStruct.pMemoryMap, headerLoc);
+
+        if ((nHeaderOffset != -1) && isOffsetAndSizeValid(xfStruct.pMemoryMap, nHeaderOffset, sizeof(BZIP2_HEADER))) {
+            XFHEADER xfHeader = {};
+            xfHeader.sParentTag = xfStruct.sParent;
+            xfHeader.fileType = xfStruct.fileType;
+            xfHeader.structID = static_cast<XBinary::STRUCTID>(STRUCTID_BZIP2_HEADER);
+            xfHeader.xLoc = headerLoc;
+            xfHeader.nSize = sizeof(BZIP2_HEADER);
+            xfHeader.xfType = XFTYPE_HEADER;
+            xfHeader.listFields = getXFRecords(xfStruct.fileType, STRUCTID_BZIP2_HEADER, headerLoc);
+            xfHeader.sTag = xfHeaderToTag(xfHeader, structIDToString(STRUCTID_BZIP2_HEADER), xfHeader.sParentTag);
+            listResult.append(xfHeader);
+        }
+    }
+
+    return listResult;
+}
+
+QList<XBinary::XFRECORD> XBZIP2::getXFRecords(FT fileType, quint32 nStructID, const XLOC &xLoc)
+{
+    Q_UNUSED(fileType)
+    Q_UNUSED(xLoc)
+
+    QList<XBinary::XFRECORD> listResult;
+
+    if (nStructID == STRUCTID_BZIP2_HEADER) {
+        listResult.append({"magic", (qint32)offsetof(BZIP2_HEADER, magic), 3, XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
+        listResult.append({"blockSize", (qint32)offsetof(BZIP2_HEADER, blockSize), 1, XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
+    }
+
+    return listResult;
+}
+
 QList<XBinary::FPART> XBZIP2::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(nLimit)

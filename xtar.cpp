@@ -175,6 +175,72 @@ QList<XBinary::DATA_HEADER> XTAR::getDataHeaders(const DATA_HEADERS_OPTIONS &dat
     return listResult;
 }
 
+QList<XBinary::XFHEADER> XTAR::getXFHeaders(const XFSTRUCT &xfStruct, PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(pPdStruct)
+
+    QList<XBinary::XFHEADER> listResult;
+    quint32 nStructID = xfStruct.nStructID;
+
+    if (nStructID == STRUCTID_UNKNOWN) {
+        XFSTRUCT _xfStruct = xfStruct;
+        _xfStruct.nStructID = STRUCTID_POSIX_HEADER;
+        _xfStruct.xLoc = offsetToLoc(0);
+        listResult.append(getXFHeaders(_xfStruct, pPdStruct));
+    } else if (nStructID == STRUCTID_POSIX_HEADER) {
+        XLOC headerLoc = xfStruct.xLoc;
+        if (headerLoc.locType == LT_UNKNOWN) {
+            headerLoc = offsetToLoc(0);
+        }
+
+        qint64 nHeaderOffset = locToOffset(xfStruct.pMemoryMap, headerLoc);
+
+        if ((nHeaderOffset != -1) && isOffsetAndSizeValid(xfStruct.pMemoryMap, nHeaderOffset, sizeof(posix_header))) {
+            XFHEADER xfHeader = {};
+            xfHeader.sParentTag = xfStruct.sParent;
+            xfHeader.fileType = xfStruct.fileType;
+            xfHeader.structID = static_cast<XBinary::STRUCTID>(STRUCTID_POSIX_HEADER);
+            xfHeader.xLoc = headerLoc;
+            xfHeader.nSize = sizeof(posix_header);
+            xfHeader.xfType = XFTYPE_HEADER;
+            xfHeader.listFields = getXFRecords(xfStruct.fileType, STRUCTID_POSIX_HEADER, headerLoc);
+            xfHeader.sTag = xfHeaderToTag(xfHeader, structIDToString(STRUCTID_POSIX_HEADER), xfHeader.sParentTag);
+            listResult.append(xfHeader);
+        }
+    }
+
+    return listResult;
+}
+
+QList<XBinary::XFRECORD> XTAR::getXFRecords(FT fileType, quint32 nStructID, const XLOC &xLoc)
+{
+    Q_UNUSED(fileType)
+    Q_UNUSED(xLoc)
+
+    QList<XBinary::XFRECORD> listResult;
+
+    if (nStructID == STRUCTID_POSIX_HEADER) {
+        listResult.append({"Name", (qint32)offsetof(posix_header, name), (qint32)sizeof(((posix_header *)0)->name), XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
+        listResult.append({"Mode", (qint32)offsetof(posix_header, mode), (qint32)sizeof(((posix_header *)0)->mode), XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
+        listResult.append({"UID", (qint32)offsetof(posix_header, uid), (qint32)sizeof(((posix_header *)0)->uid), XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
+        listResult.append({"GID", (qint32)offsetof(posix_header, gid), (qint32)sizeof(((posix_header *)0)->gid), XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
+        listResult.append({"Size", (qint32)offsetof(posix_header, size), (qint32)sizeof(((posix_header *)0)->size), XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
+        listResult.append({"MTime", (qint32)offsetof(posix_header, mtime), (qint32)sizeof(((posix_header *)0)->mtime), XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
+        listResult.append({"Checksum", (qint32)offsetof(posix_header, chksum), (qint32)sizeof(((posix_header *)0)->chksum), XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
+        listResult.append({"Typeflag", (qint32)offsetof(posix_header, typeflag), (qint32)sizeof(((posix_header *)0)->typeflag), XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
+        listResult.append({"Linkname", (qint32)offsetof(posix_header, linkname), (qint32)sizeof(((posix_header *)0)->linkname), XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
+        listResult.append({"Magic", (qint32)offsetof(posix_header, magic), (qint32)sizeof(((posix_header *)0)->magic), XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
+        listResult.append({"Version", (qint32)offsetof(posix_header, version), (qint32)sizeof(((posix_header *)0)->version), XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
+        listResult.append({"Uname", (qint32)offsetof(posix_header, uname), (qint32)sizeof(((posix_header *)0)->uname), XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
+        listResult.append({"Gname", (qint32)offsetof(posix_header, gname), (qint32)sizeof(((posix_header *)0)->gname), XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
+        listResult.append({"Devmajor", (qint32)offsetof(posix_header, devmajor), (qint32)sizeof(((posix_header *)0)->devmajor), XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
+        listResult.append({"Devminor", (qint32)offsetof(posix_header, devminor), (qint32)sizeof(((posix_header *)0)->devminor), XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
+        listResult.append({"Prefix", (qint32)offsetof(posix_header, prefix), (qint32)sizeof(((posix_header *)0)->prefix), XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
+    }
+
+    return listResult;
+}
+
 QList<XBinary::FPART> XTAR::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
 {
     QList<XBinary::FPART> listResult;

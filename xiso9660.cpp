@@ -290,6 +290,137 @@ QList<XBinary::DATA_HEADER> XISO9660::getDataHeaders(const DATA_HEADERS_OPTIONS 
     return listResult;
 }
 
+QList<XBinary::XFHEADER> XISO9660::getXFHeaders(const XFSTRUCT &xfStruct, PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(pPdStruct)
+
+    QList<XBinary::XFHEADER> listResult;
+    quint32 nStructID = xfStruct.nStructID;
+
+    if (nStructID == STRUCTID_UNKNOWN) {
+        XFSTRUCT _xfStruct = xfStruct;
+        _xfStruct.nStructID = STRUCTID_PVDESC;
+        _xfStruct.xLoc = offsetToLoc(_getPrimaryVolumeDescriptorOffset());
+        listResult.append(getXFHeaders(_xfStruct, pPdStruct));
+    } else if ((nStructID == STRUCTID_PVDESC) || (nStructID == STRUCTID_DIR_RECORD)) {
+        XLOC headerLoc = xfStruct.xLoc;
+        if (headerLoc.locType == LT_UNKNOWN) {
+            headerLoc = (nStructID == STRUCTID_PVDESC) ? offsetToLoc(_getPrimaryVolumeDescriptorOffset())
+                                                       : offsetToLoc(_getPrimaryVolumeDescriptorOffset() + offsetof(ISO9660_PVDESC, nRootDirRecord));
+        }
+
+        qint64 nHeaderOffset = locToOffset(xfStruct.pMemoryMap, headerLoc);
+
+        if (nHeaderOffset != -1) {
+            qint64 nHeaderSize = xfStruct.nSize;
+
+            if (nHeaderSize <= 0) {
+                if (nStructID == STRUCTID_PVDESC) {
+                    nHeaderSize = sizeof(ISO9660_PVDESC);
+                } else {
+                    nHeaderSize = read_uint8(nHeaderOffset);
+                }
+            }
+
+            if ((nHeaderSize > 0) && isOffsetAndSizeValid(xfStruct.pMemoryMap, nHeaderOffset, nHeaderSize)) {
+                XFHEADER xfHeader = {};
+                xfHeader.sParentTag = xfStruct.sParent;
+                xfHeader.fileType = xfStruct.fileType;
+                xfHeader.structID = static_cast<XBinary::STRUCTID>(nStructID);
+                xfHeader.xLoc = headerLoc;
+                xfHeader.nSize = nHeaderSize;
+                xfHeader.xfType = XFTYPE_HEADER;
+                xfHeader.listFields = getXFRecords(xfStruct.fileType, nStructID, headerLoc);
+                xfHeader.sTag = xfHeaderToTag(xfHeader, structIDToString(nStructID), xfHeader.sParentTag);
+                listResult.append(xfHeader);
+
+                if ((nStructID == STRUCTID_PVDESC) && xfStruct.bIsParent) {
+                    XFSTRUCT dirStruct = xfStruct;
+                    dirStruct.sParent = xfHeader.sTag;
+                    dirStruct.nStructID = STRUCTID_DIR_RECORD;
+                    dirStruct.xLoc = offsetToLoc(nHeaderOffset + offsetof(ISO9660_PVDESC, nRootDirRecord));
+                    dirStruct.nSize = sizeof(ISO9660_DIR_RECORD);
+                    dirStruct.bIsParent = false;
+                    listResult.append(getXFHeaders(dirStruct, pPdStruct));
+                }
+            }
+        }
+    }
+
+    return listResult;
+}
+
+QList<XBinary::XFRECORD> XISO9660::getXFRecords(FT fileType, quint32 nStructID, const XLOC &xLoc)
+{
+    Q_UNUSED(fileType)
+    Q_UNUSED(xLoc)
+
+    QList<XBinary::XFRECORD> listResult;
+
+    if (nStructID == STRUCTID_PVDESC) {
+        listResult.append({"nDescType", (qint32)offsetof(ISO9660_PVDESC, nDescType), 1, XFRECORD_FLAG_NONE, VT_UINT8});
+        listResult.append({"szStandard", (qint32)offsetof(ISO9660_PVDESC, szStandard), 5, XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
+        listResult.append({"nDescVersion", (qint32)offsetof(ISO9660_PVDESC, nDescVersion), 1, XFRECORD_FLAG_VERSION, VT_UINT8});
+        listResult.append({"nUnused1", (qint32)offsetof(ISO9660_PVDESC, nUnused1), 1, XFRECORD_FLAG_NONE, VT_UINT8});
+        listResult.append({"szSystemId", (qint32)offsetof(ISO9660_PVDESC, szSystemId), 32, XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
+        listResult.append({"szVolumeId", (qint32)offsetof(ISO9660_PVDESC, szVolumeId), 32, XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
+        listResult.append({"nUnused2", (qint32)offsetof(ISO9660_PVDESC, nUnused2), 8, XFRECORD_FLAG_NONE, VT_BYTE_ARRAY});
+        listResult.append({"nVolumeSpaceSizeLE", (qint32)offsetof(ISO9660_PVDESC, nVolumeSpaceSizeLE), 4, XFRECORD_FLAG_SIZE, VT_UINT32});
+        listResult.append({"nVolumeSpaceSizeBE", (qint32)offsetof(ISO9660_PVDESC, nVolumeSpaceSizeBE), 4, XFRECORD_FLAG_SIZE, VT_UINT32});
+        listResult.append({"nUnused3", (qint32)offsetof(ISO9660_PVDESC, nUnused3), 32, XFRECORD_FLAG_NONE, VT_BYTE_ARRAY});
+        listResult.append({"nVolumeSetSizeLE", (qint32)offsetof(ISO9660_PVDESC, nVolumeSetSizeLE), 2, XFRECORD_FLAG_COUNT, VT_UINT16});
+        listResult.append({"nVolumeSetSizeBE", (qint32)offsetof(ISO9660_PVDESC, nVolumeSetSizeBE), 2, XFRECORD_FLAG_COUNT, VT_UINT16});
+        listResult.append({"nVolumeSeqNumLE", (qint32)offsetof(ISO9660_PVDESC, nVolumeSeqNumLE), 2, XFRECORD_FLAG_COUNT, VT_UINT16});
+        listResult.append({"nVolumeSeqNumBE", (qint32)offsetof(ISO9660_PVDESC, nVolumeSeqNumBE), 2, XFRECORD_FLAG_COUNT, VT_UINT16});
+        listResult.append({"nLogicalBlockSizeLE", (qint32)offsetof(ISO9660_PVDESC, nLogicalBlockSizeLE), 2, XFRECORD_FLAG_SIZE, VT_UINT16});
+        listResult.append({"nLogicalBlockSizeBE", (qint32)offsetof(ISO9660_PVDESC, nLogicalBlockSizeBE), 2, XFRECORD_FLAG_SIZE, VT_UINT16});
+        listResult.append({"nPathTableSizeLE", (qint32)offsetof(ISO9660_PVDESC, nPathTableSizeLE), 4, XFRECORD_FLAG_SIZE, VT_UINT32});
+        listResult.append({"nPathTableSizeBE", (qint32)offsetof(ISO9660_PVDESC, nPathTableSizeBE), 4, XFRECORD_FLAG_SIZE, VT_UINT32});
+        listResult.append({"nLPathTableLoc", (qint32)offsetof(ISO9660_PVDESC, nLPathTableLoc), 4, XFRECORD_FLAG_OFFSET, VT_UINT32});
+        listResult.append({"nOptLPathTableLoc", (qint32)offsetof(ISO9660_PVDESC, nOptLPathTableLoc), 4, XFRECORD_FLAG_OFFSET, VT_UINT32});
+        listResult.append({"nMPathTableLoc", (qint32)offsetof(ISO9660_PVDESC, nMPathTableLoc), 4, XFRECORD_FLAG_OFFSET, VT_UINT32});
+        listResult.append({"nOptMPathTableLoc", (qint32)offsetof(ISO9660_PVDESC, nOptMPathTableLoc), 4, XFRECORD_FLAG_OFFSET, VT_UINT32});
+        listResult.append({"nRootDirRecord", (qint32)offsetof(ISO9660_PVDESC, nRootDirRecord), 34, XFRECORD_FLAG_NONE, VT_BYTE_ARRAY});
+        listResult.append({"szVolSetId", (qint32)offsetof(ISO9660_PVDESC, szVolSetId), 128, XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
+        listResult.append({"szPublisherId", (qint32)offsetof(ISO9660_PVDESC, szPublisherId), 128, XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
+        listResult.append({"szDataPreparerId", (qint32)offsetof(ISO9660_PVDESC, szDataPreparerId), 128, XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
+        listResult.append({"szApplicationId", (qint32)offsetof(ISO9660_PVDESC, szApplicationId), 128, XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
+        listResult.append({"szCopyrightFile", (qint32)offsetof(ISO9660_PVDESC, szCopyrightFile), 37, XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
+        listResult.append({"szAbstractFile", (qint32)offsetof(ISO9660_PVDESC, szAbstractFile), 36, XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
+        listResult.append({"szBiblioFile", (qint32)offsetof(ISO9660_PVDESC, szBiblioFile), 37, XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
+        listResult.append({"szCreationTime", (qint32)offsetof(ISO9660_PVDESC, szCreationTime), 17, XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
+        listResult.append({"szModificationTime", (qint32)offsetof(ISO9660_PVDESC, szModificationTime), 17, XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
+        listResult.append({"szExpirationTime", (qint32)offsetof(ISO9660_PVDESC, szExpirationTime), 17, XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
+        listResult.append({"szEffectiveTime", (qint32)offsetof(ISO9660_PVDESC, szEffectiveTime), 17, XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
+        listResult.append({"nFileStructVersion", (qint32)offsetof(ISO9660_PVDESC, nFileStructVersion), 1, XFRECORD_FLAG_VERSION, VT_UINT8});
+        listResult.append({"nUnused4", (qint32)offsetof(ISO9660_PVDESC, nUnused4), 1, XFRECORD_FLAG_NONE, VT_UINT8});
+        listResult.append({"nAppData", (qint32)offsetof(ISO9660_PVDESC, nAppData), 512, XFRECORD_FLAG_NONE, VT_BYTE_ARRAY});
+        listResult.append({"nUnused5", (qint32)offsetof(ISO9660_PVDESC, nUnused5), 654, XFRECORD_FLAG_NONE, VT_BYTE_ARRAY});
+    } else if (nStructID == STRUCTID_DIR_RECORD) {
+        listResult.append({"nLength", (qint32)offsetof(ISO9660_DIR_RECORD, nLength), 1, XFRECORD_FLAG_SIZE, VT_UINT8});
+        listResult.append({"nExtentAttrLength", (qint32)offsetof(ISO9660_DIR_RECORD, nExtentAttrLength), 1, XFRECORD_FLAG_SIZE, VT_UINT8});
+        listResult.append({"nExtentLocationLE", (qint32)offsetof(ISO9660_DIR_RECORD, nExtentLocationLE), 4, XFRECORD_FLAG_OFFSET, VT_UINT32});
+        listResult.append({"nExtentLocationBE", (qint32)offsetof(ISO9660_DIR_RECORD, nExtentLocationBE), 4, XFRECORD_FLAG_OFFSET, VT_UINT32});
+        listResult.append({"nDataLengthLE", (qint32)offsetof(ISO9660_DIR_RECORD, nDataLengthLE), 4, XFRECORD_FLAG_SIZE, VT_UINT32});
+        listResult.append({"nDataLengthBE", (qint32)offsetof(ISO9660_DIR_RECORD, nDataLengthBE), 4, XFRECORD_FLAG_SIZE, VT_UINT32});
+        listResult.append({"nYear", (qint32)offsetof(ISO9660_DIR_RECORD, nYear), 1, XFRECORD_FLAG_NONE, VT_UINT8});
+        listResult.append({"nMonth", (qint32)offsetof(ISO9660_DIR_RECORD, nMonth), 1, XFRECORD_FLAG_NONE, VT_UINT8});
+        listResult.append({"nDay", (qint32)offsetof(ISO9660_DIR_RECORD, nDay), 1, XFRECORD_FLAG_NONE, VT_UINT8});
+        listResult.append({"nHour", (qint32)offsetof(ISO9660_DIR_RECORD, nHour), 1, XFRECORD_FLAG_NONE, VT_UINT8});
+        listResult.append({"nMinute", (qint32)offsetof(ISO9660_DIR_RECORD, nMinute), 1, XFRECORD_FLAG_NONE, VT_UINT8});
+        listResult.append({"nSecond", (qint32)offsetof(ISO9660_DIR_RECORD, nSecond), 1, XFRECORD_FLAG_NONE, VT_UINT8});
+        listResult.append({"nGMTOffset", (qint32)offsetof(ISO9660_DIR_RECORD, nGMTOffset), 1, XFRECORD_FLAG_NONE, VT_UINT8});
+        listResult.append({"nFileFlags", (qint32)offsetof(ISO9660_DIR_RECORD, nFileFlags), 1, XFRECORD_FLAG_NONE, VT_UINT8});
+        listResult.append({"nFileUnitSize", (qint32)offsetof(ISO9660_DIR_RECORD, nFileUnitSize), 1, XFRECORD_FLAG_SIZE, VT_UINT8});
+        listResult.append({"nInterleaveGapSize", (qint32)offsetof(ISO9660_DIR_RECORD, nInterleaveGapSize), 1, XFRECORD_FLAG_SIZE, VT_UINT8});
+        listResult.append({"nSequenceNumberLE", (qint32)offsetof(ISO9660_DIR_RECORD, nSequenceNumberLE), 4, XFRECORD_FLAG_COUNT, VT_UINT32});
+        listResult.append({"nSequenceNumberBE", (qint32)offsetof(ISO9660_DIR_RECORD, nSequenceNumberBE), 4, XFRECORD_FLAG_COUNT, VT_UINT32});
+        listResult.append({"nFileIdLength", (qint32)offsetof(ISO9660_DIR_RECORD, nFileIdLength), 1, XFRECORD_FLAG_SIZE, VT_UINT8});
+    }
+
+    return listResult;
+}
+
 QList<XBinary::FPART> XISO9660::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(nLimit)

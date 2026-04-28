@@ -194,6 +194,59 @@ QList<XBinary::DATA_HEADER> XCompressZ::getDataHeaders(const DATA_HEADERS_OPTION
     return listResult;
 }
 
+QList<XBinary::XFHEADER> XCompressZ::getXFHeaders(const XFSTRUCT &xfStruct, PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(pPdStruct)
+
+    QList<XBinary::XFHEADER> listResult;
+    quint32 nStructID = xfStruct.nStructID;
+
+    if (nStructID == STRUCTID_UNKNOWN) {
+        XFSTRUCT _xfStruct = xfStruct;
+        _xfStruct.nStructID = STRUCTID_COMPRESSZ_HEADER;
+        _xfStruct.xLoc = offsetToLoc(0);
+        listResult.append(getXFHeaders(_xfStruct, pPdStruct));
+    } else if (nStructID == STRUCTID_COMPRESSZ_HEADER) {
+        XLOC headerLoc = xfStruct.xLoc;
+        if (headerLoc.locType == LT_UNKNOWN) {
+            headerLoc = offsetToLoc(0);
+        }
+
+        qint64 nHeaderOffset = locToOffset(xfStruct.pMemoryMap, headerLoc);
+
+        if ((nHeaderOffset != -1) && isOffsetAndSizeValid(xfStruct.pMemoryMap, nHeaderOffset, sizeof(COMPRESSZ_HEADER))) {
+            XFHEADER xfHeader = {};
+            xfHeader.sParentTag = xfStruct.sParent;
+            xfHeader.fileType = xfStruct.fileType;
+            xfHeader.structID = static_cast<XBinary::STRUCTID>(STRUCTID_COMPRESSZ_HEADER);
+            xfHeader.xLoc = headerLoc;
+            xfHeader.nSize = sizeof(COMPRESSZ_HEADER);
+            xfHeader.xfType = XFTYPE_HEADER;
+            xfHeader.listFields = getXFRecords(xfStruct.fileType, STRUCTID_COMPRESSZ_HEADER, headerLoc);
+            xfHeader.sTag = xfHeaderToTag(xfHeader, structIDToString(STRUCTID_COMPRESSZ_HEADER), xfHeader.sParentTag);
+            listResult.append(xfHeader);
+        }
+    }
+
+    return listResult;
+}
+
+QList<XBinary::XFRECORD> XCompressZ::getXFRecords(FT fileType, quint32 nStructID, const XLOC &xLoc)
+{
+    Q_UNUSED(fileType)
+    Q_UNUSED(xLoc)
+
+    QList<XBinary::XFRECORD> listResult;
+
+    if (nStructID == STRUCTID_COMPRESSZ_HEADER) {
+        listResult.append({"nMagic0", (qint32)offsetof(COMPRESSZ_HEADER, nMagic0), 1, XFRECORD_FLAG_NONE, VT_UINT8});
+        listResult.append({"nMagic1", (qint32)offsetof(COMPRESSZ_HEADER, nMagic1), 1, XFRECORD_FLAG_NONE, VT_UINT8});
+        listResult.append({"nFlags", (qint32)offsetof(COMPRESSZ_HEADER, nFlags), 1, XFRECORD_FLAG_NONE, VT_UINT8});
+    }
+
+    return listResult;
+}
+
 QList<XBinary::FPART> XCompressZ::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(nLimit)

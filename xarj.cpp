@@ -466,6 +466,82 @@ QList<XBinary::DATA_HEADER> XARJ::getDataHeaders(const DATA_HEADERS_OPTIONS &dat
     return listResult;
 }
 
+QList<XBinary::XFHEADER> XARJ::getXFHeaders(const XFSTRUCT &xfStruct, PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(pPdStruct)
+
+    QList<XBinary::XFHEADER> listResult;
+    quint32 nStructID = xfStruct.nStructID;
+
+    if (nStructID == STRUCTID_UNKNOWN) {
+        XFSTRUCT _xfStruct = xfStruct;
+        _xfStruct.nStructID = STRUCTID_HEADER;
+        _xfStruct.xLoc = offsetToLoc(0);
+        listResult.append(getXFHeaders(_xfStruct, pPdStruct));
+    } else if ((nStructID == STRUCTID_HEADER) || (nStructID == STRUCTID_RECORD)) {
+        XLOC headerLoc = xfStruct.xLoc;
+        if (headerLoc.locType == LT_UNKNOWN) {
+            headerLoc = offsetToLoc(0);
+        }
+
+        qint64 nHeaderOffset = locToOffset(xfStruct.pMemoryMap, headerLoc);
+
+        if (nHeaderOffset != -1) {
+            qint64 nHeaderSize = xfStruct.nSize;
+
+            if (nHeaderSize <= 0) {
+                nHeaderSize = _getEntryHeaderSize(nHeaderOffset);
+            }
+
+            if ((nHeaderSize > 0) && isOffsetAndSizeValid(xfStruct.pMemoryMap, nHeaderOffset, nHeaderSize)) {
+                XFHEADER xfHeader = {};
+                xfHeader.sParentTag = xfStruct.sParent;
+                xfHeader.fileType = xfStruct.fileType;
+                xfHeader.structID = static_cast<XBinary::STRUCTID>(nStructID);
+                xfHeader.xLoc = headerLoc;
+                xfHeader.nSize = nHeaderSize;
+                xfHeader.xfType = XFTYPE_HEADER;
+                xfHeader.listFields = getXFRecords(xfStruct.fileType, nStructID, headerLoc);
+                xfHeader.sTag = xfHeaderToTag(xfHeader, structIDToString(nStructID), xfHeader.sParentTag);
+                listResult.append(xfHeader);
+            }
+        }
+    }
+
+    return listResult;
+}
+
+QList<XBinary::XFRECORD> XARJ::getXFRecords(FT fileType, quint32 nStructID, const XLOC &xLoc)
+{
+    Q_UNUSED(fileType)
+    Q_UNUSED(xLoc)
+
+    QList<XBinary::XFRECORD> listResult;
+
+    if ((nStructID == STRUCTID_HEADER) || (nStructID == STRUCTID_RECORD)) {
+        listResult.append({"Marker", 0, 2, XFRECORD_FLAG_NONE, VT_UINT16});
+        listResult.append({"Basic Header Size", 2, 2, XFRECORD_FLAG_SIZE, VT_UINT16});
+        listResult.append({"First Header Size", 4, 1, XFRECORD_FLAG_SIZE, VT_UINT8});
+        listResult.append({"Archiver Version", 5, 1, XFRECORD_FLAG_VERSION, VT_UINT8});
+        listResult.append({"Min Version", 6, 1, XFRECORD_FLAG_VERSION, VT_UINT8});
+        listResult.append({"Host OS", 7, 1, XFRECORD_FLAG_NONE, VT_UINT8});
+        listResult.append({"ARJ Flags", 8, 1, XFRECORD_FLAG_NONE, VT_UINT8});
+        listResult.append({"Method", 9, 1, XFRECORD_FLAG_NONE, VT_UINT8});
+        listResult.append({"File Type", 10, 1, XFRECORD_FLAG_NONE, VT_UINT8});
+        listResult.append({"Reserved", 11, 1, XFRECORD_FLAG_NONE, VT_UINT8});
+        listResult.append({"Date/Time", 12, 4, XFRECORD_FLAG_NONE, VT_UINT32});
+        listResult.append({"Compressed Size", 16, 4, XFRECORD_FLAG_SIZE, VT_UINT32});
+        listResult.append({"Original Size", 20, 4, XFRECORD_FLAG_SIZE, VT_UINT32});
+        listResult.append({"CRC32", 24, 4, XFRECORD_FLAG_NONE, VT_UINT32});
+        listResult.append({"Entry Name Pos", 28, 2, XFRECORD_FLAG_OFFSET, VT_UINT16});
+        listResult.append({"File Access Mode", 30, 2, XFRECORD_FLAG_NONE, VT_UINT16});
+        listResult.append({"First Chapter", 32, 1, XFRECORD_FLAG_NONE, VT_UINT8});
+        listResult.append({"Last Chapter", 33, 1, XFRECORD_FLAG_NONE, VT_UINT8});
+    }
+
+    return listResult;
+}
+
 QList<XBinary::FPART> XARJ::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(nLimit)

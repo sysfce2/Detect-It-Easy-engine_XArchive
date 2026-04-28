@@ -330,6 +330,62 @@ QList<XBinary::DATA_HEADER> XGzip::getDataHeaders(const DATA_HEADERS_OPTIONS &da
     return listResult;
 }
 
+QList<XBinary::XFHEADER> XGzip::getXFHeaders(const XFSTRUCT &xfStruct, PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(pPdStruct)
+
+    QList<XBinary::XFHEADER> listResult;
+    quint32 nStructID = xfStruct.nStructID;
+
+    if (nStructID == STRUCTID_UNKNOWN) {
+        XFSTRUCT _xfStruct = xfStruct;
+        _xfStruct.nStructID = STRUCTID_GZIP_HEADER;
+        _xfStruct.xLoc = offsetToLoc(0);
+        listResult.append(getXFHeaders(_xfStruct, pPdStruct));
+    } else if (nStructID == STRUCTID_GZIP_HEADER) {
+        XLOC headerLoc = xfStruct.xLoc;
+        if (headerLoc.locType == LT_UNKNOWN) {
+            headerLoc = offsetToLoc(0);
+        }
+
+        qint64 nHeaderOffset = locToOffset(xfStruct.pMemoryMap, headerLoc);
+
+        if ((nHeaderOffset != -1) && isOffsetAndSizeValid(xfStruct.pMemoryMap, nHeaderOffset, sizeof(GZIP_HEADER))) {
+            XFHEADER xfHeader = {};
+            xfHeader.sParentTag = xfStruct.sParent;
+            xfHeader.fileType = xfStruct.fileType;
+            xfHeader.structID = static_cast<XBinary::STRUCTID>(STRUCTID_GZIP_HEADER);
+            xfHeader.xLoc = headerLoc;
+            xfHeader.nSize = sizeof(GZIP_HEADER);
+            xfHeader.xfType = XFTYPE_HEADER;
+            xfHeader.listFields = getXFRecords(xfStruct.fileType, STRUCTID_GZIP_HEADER, headerLoc);
+            xfHeader.sTag = xfHeaderToTag(xfHeader, structIDToString(STRUCTID_GZIP_HEADER), xfHeader.sParentTag);
+            listResult.append(xfHeader);
+        }
+    }
+
+    return listResult;
+}
+
+QList<XBinary::XFRECORD> XGzip::getXFRecords(FT fileType, quint32 nStructID, const XLOC &xLoc)
+{
+    Q_UNUSED(fileType)
+    Q_UNUSED(xLoc)
+
+    QList<XBinary::XFRECORD> listResult;
+
+    if (nStructID == STRUCTID_GZIP_HEADER) {
+        listResult.append({"nMagic", (qint32)offsetof(GZIP_HEADER, nMagic), 2, XFRECORD_FLAG_NONE, VT_UINT16});
+        listResult.append({"nCompressionMethod", (qint32)offsetof(GZIP_HEADER, nCompressionMethod), 1, XFRECORD_FLAG_NONE, VT_UINT8});
+        listResult.append({"nFileFlags", (qint32)offsetof(GZIP_HEADER, nFileFlags), 1, XFRECORD_FLAG_NONE, VT_UINT8});
+        listResult.append({"nTimeStamp", (qint32)offsetof(GZIP_HEADER, nTimeStamp), 4, XFRECORD_FLAG_UNIXTIME, VT_UINT32});
+        listResult.append({"nCompressionFlags", (qint32)offsetof(GZIP_HEADER, nCompressionFlags), 1, XFRECORD_FLAG_NONE, VT_UINT8});
+        listResult.append({"nOS", (qint32)offsetof(GZIP_HEADER, nOS), 1, XFRECORD_FLAG_NONE, VT_UINT8});
+    }
+
+    return listResult;
+}
+
 XGzip::GZIP_HEADER XGzip::_read_GZIP_HEADER(qint64 nOffset)
 {
     GZIP_HEADER result = {};

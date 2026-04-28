@@ -91,6 +91,10 @@ set(XARCHIVE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/xtar_zstd.h
     ${CMAKE_CURRENT_LIST_DIR}/xzstd.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xzstd.h
+    ${CMAKE_CURRENT_LIST_DIR}/xlz4.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xlz4.h
+    ${CMAKE_CURRENT_LIST_DIR}/xlzma.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xlzma.h
     ${CMAKE_CURRENT_LIST_DIR}/xlzo.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xlzo.h
     ${CMAKE_CURRENT_LIST_DIR}/xcompressz.cpp

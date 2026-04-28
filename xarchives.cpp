@@ -337,6 +337,8 @@ QSet<XBinary::FT> XArchives::getArchiveOpenValidFileTypes()
     result.insert(XBinary::FT_GZIP);
     result.insert(XBinary::FT_BZIP2);
     result.insert(XBinary::FT_BROTLI);
+    result.insert(XBinary::FT_LZ4);
+    result.insert(XBinary::FT_LZMA);
     result.insert(XBinary::FT_ZLIB);
     result.insert(XBinary::FT_LHA);
     result.insert(XBinary::FT_ARJ);

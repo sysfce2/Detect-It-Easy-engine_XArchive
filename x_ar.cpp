@@ -226,6 +226,65 @@ QList<XBinary::DATA_HEADER> X_Ar::getDataHeaders(const DATA_HEADERS_OPTIONS &dat
     return listResult;
 }
 
+QList<XBinary::XFHEADER> X_Ar::getXFHeaders(const XFSTRUCT &xfStruct, PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(pPdStruct)
+
+    QList<XBinary::XFHEADER> listResult;
+    quint32 nStructID = xfStruct.nStructID;
+
+    if (nStructID == STRUCTID_UNKNOWN) {
+        XFSTRUCT _xfStruct = xfStruct;
+        _xfStruct.nStructID = STRUCTID_SIGNATURE;
+        _xfStruct.xLoc = offsetToLoc(0);
+        listResult.append(getXFHeaders(_xfStruct, pPdStruct));
+    } else if (nStructID == STRUCTID_SIGNATURE) {
+        XLOC headerLoc = xfStruct.xLoc;
+        if (headerLoc.locType == LT_UNKNOWN) {
+            headerLoc = offsetToLoc(0);
+        }
+
+        qint64 nHeaderOffset = locToOffset(xfStruct.pMemoryMap, headerLoc);
+
+        if ((nHeaderOffset != -1) && isOffsetAndSizeValid(xfStruct.pMemoryMap, nHeaderOffset, 8)) {
+            XFHEADER xfHeader = {};
+            xfHeader.sParentTag = xfStruct.sParent;
+            xfHeader.fileType = xfStruct.fileType;
+            xfHeader.structID = static_cast<XBinary::STRUCTID>(STRUCTID_SIGNATURE);
+            xfHeader.xLoc = headerLoc;
+            xfHeader.nSize = 8;
+            xfHeader.xfType = XFTYPE_HEADER;
+            xfHeader.listFields = getXFRecords(xfStruct.fileType, STRUCTID_SIGNATURE, headerLoc);
+            xfHeader.sTag = xfHeaderToTag(xfHeader, structIDToString(STRUCTID_SIGNATURE), xfHeader.sParentTag);
+            listResult.append(xfHeader);
+        }
+    }
+
+    return listResult;
+}
+
+QList<XBinary::XFRECORD> X_Ar::getXFRecords(FT fileType, quint32 nStructID, const XLOC &xLoc)
+{
+    Q_UNUSED(fileType)
+    Q_UNUSED(xLoc)
+
+    QList<XBinary::XFRECORD> listResult;
+
+    if (nStructID == STRUCTID_SIGNATURE) {
+        listResult.append({"Magic", 0, 8, XFRECORD_FLAG_NONE, VT_BYTE_ARRAY});
+    } else if (nStructID == STRUCTID_FRECORD) {
+        listResult.append({"FileId", (qint32)offsetof(FRECORD, fileId), (qint32)sizeof(((FRECORD *)0)->fileId), XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
+        listResult.append({"FileMod", (qint32)offsetof(FRECORD, fileMod), (qint32)sizeof(((FRECORD *)0)->fileMod), XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
+        listResult.append({"OwnerId", (qint32)offsetof(FRECORD, ownerId), (qint32)sizeof(((FRECORD *)0)->ownerId), XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
+        listResult.append({"GroupId", (qint32)offsetof(FRECORD, groupId), (qint32)sizeof(((FRECORD *)0)->groupId), XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
+        listResult.append({"FileMode", (qint32)offsetof(FRECORD, fileMode), (qint32)sizeof(((FRECORD *)0)->fileMode), XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
+        listResult.append({"FileSize", (qint32)offsetof(FRECORD, fileSize), (qint32)sizeof(((FRECORD *)0)->fileSize), XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
+        listResult.append({"EndChar", (qint32)offsetof(FRECORD, endChar), (qint32)sizeof(((FRECORD *)0)->endChar), XFRECORD_FLAG_NONE, VT_BYTE_ARRAY});
+    }
+
+    return listResult;
+}
+
 qint32 X_Ar::readTableRow(qint32 nRow, LT locType, XADDR nLocation, const DATA_RECORDS_OPTIONS &dataRecordsOptions, QList<DATA_RECORD_ROW> *pListDataRecords,
                           void *pUserData, PDSTRUCT *pPdStruct)
 {

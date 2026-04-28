@@ -81,6 +81,8 @@ HEADERS += \
     $$PWD/xxz.h \
     $$PWD/xzlib.h \
     $$PWD/xzstd.h \
+    $$PWD/xlz4.h \
+    $$PWD/xlzma.h \
     $$PWD/xlzo.h \
     $$PWD/xcompressz.h \
     $$PWD/xminidump.h \
@@ -162,6 +164,8 @@ SOURCES += \
     $$PWD/xxz.cpp \
     $$PWD/xzlib.cpp \
     $$PWD/xzstd.cpp \
+    $$PWD/xlz4.cpp \
+    $$PWD/xlzma.cpp \
     $$PWD/xlzo.cpp \
     $$PWD/xcompressz.cpp \
     $$PWD/xminidump.cpp \

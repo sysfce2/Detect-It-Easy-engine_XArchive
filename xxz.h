@@ -93,6 +93,8 @@ public:
     virtual QString structIDToFtString(quint32 nID) override;
     virtual quint32 ftStringToStructID(const QString &sFtString) override;
     virtual QList<DATA_HEADER> getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct) override;
+    virtual QList<XFHEADER> getXFHeaders(const XFSTRUCT &xfStruct, PDSTRUCT *pPdStruct) override;
+    virtual QList<XFRECORD> getXFRecords(FT fileType, quint32 nStructID, const XLOC &xLoc) override;
 
     STREAM_HEADER _read_STREAM_HEADER(qint64 nOffset);
     STREAM_FOOTER _read_STREAM_FOOTER(qint64 nOffset);

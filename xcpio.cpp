@@ -498,6 +498,118 @@ QList<XBinary::DATA_HEADER> XCPIO::getDataHeaders(const DATA_HEADERS_OPTIONS &da
     return listResult;
 }
 
+QList<XBinary::XFHEADER> XCPIO::getXFHeaders(const XFSTRUCT &xfStruct, PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(pPdStruct)
+
+    QList<XBinary::XFHEADER> listResult;
+    quint32 nStructID = xfStruct.nStructID;
+
+    if (nStructID == STRUCTID_UNKNOWN) {
+        CPIO_FORMAT format = _detectFormat(0);
+
+        if ((format == CPIO_FORMAT_NEWC) || (format == CPIO_FORMAT_CRC)) {
+            nStructID = (format == CPIO_FORMAT_NEWC) ? STRUCTID_NEWC_HEADER : STRUCTID_CRC_HEADER;
+        } else if (format == CPIO_FORMAT_ODC) {
+            nStructID = STRUCTID_ODC_HEADER;
+        } else if ((format == CPIO_FORMAT_BINARY_LE) || (format == CPIO_FORMAT_BINARY_BE)) {
+            nStructID = STRUCTID_BINARY_HEADER;
+        }
+
+        if (nStructID != STRUCTID_UNKNOWN) {
+            XFSTRUCT _xfStruct = xfStruct;
+            _xfStruct.nStructID = nStructID;
+            _xfStruct.xLoc = offsetToLoc(0);
+            listResult.append(getXFHeaders(_xfStruct, pPdStruct));
+        }
+    } else if ((nStructID == STRUCTID_NEWC_HEADER) || (nStructID == STRUCTID_CRC_HEADER) || (nStructID == STRUCTID_ODC_HEADER) ||
+               (nStructID == STRUCTID_BINARY_HEADER)) {
+        XLOC headerLoc = xfStruct.xLoc;
+        if (headerLoc.locType == LT_UNKNOWN) {
+            headerLoc = offsetToLoc(0);
+        }
+
+        qint64 nHeaderOffset = locToOffset(xfStruct.pMemoryMap, headerLoc);
+        qint64 nHeaderSize = 0;
+
+        if ((nStructID == STRUCTID_NEWC_HEADER) || (nStructID == STRUCTID_CRC_HEADER)) {
+            nHeaderSize = sizeof(CPIO_NEWC_HEADER);
+        } else if (nStructID == STRUCTID_ODC_HEADER) {
+            nHeaderSize = sizeof(CPIO_ODC_HEADER);
+        } else if (nStructID == STRUCTID_BINARY_HEADER) {
+            nHeaderSize = sizeof(CPIO_BINARY_HEADER);
+        }
+
+        if ((nHeaderOffset != -1) && (nHeaderSize > 0) && isOffsetAndSizeValid(xfStruct.pMemoryMap, nHeaderOffset, nHeaderSize)) {
+            XFHEADER xfHeader = {};
+            xfHeader.sParentTag = xfStruct.sParent;
+            xfHeader.fileType = xfStruct.fileType;
+            xfHeader.structID = static_cast<XBinary::STRUCTID>(nStructID);
+            xfHeader.xLoc = headerLoc;
+            xfHeader.nSize = nHeaderSize;
+            xfHeader.xfType = XFTYPE_HEADER;
+            xfHeader.listFields = getXFRecords(xfStruct.fileType, nStructID, headerLoc);
+            xfHeader.sTag = xfHeaderToTag(xfHeader, structIDToString(nStructID), xfHeader.sParentTag);
+            listResult.append(xfHeader);
+        }
+    }
+
+    return listResult;
+}
+
+QList<XBinary::XFRECORD> XCPIO::getXFRecords(FT fileType, quint32 nStructID, const XLOC &xLoc)
+{
+    Q_UNUSED(fileType)
+    Q_UNUSED(xLoc)
+
+    QList<XBinary::XFRECORD> listResult;
+
+    if ((nStructID == STRUCTID_NEWC_HEADER) || (nStructID == STRUCTID_CRC_HEADER)) {
+        listResult.append({"Magic", (qint32)offsetof(CPIO_NEWC_HEADER, magic), (qint32)sizeof(((CPIO_NEWC_HEADER *)0)->magic), XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
+        listResult.append({"Inode", (qint32)offsetof(CPIO_NEWC_HEADER, ino), (qint32)sizeof(((CPIO_NEWC_HEADER *)0)->ino), XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
+        listResult.append({"Mode", (qint32)offsetof(CPIO_NEWC_HEADER, mode), (qint32)sizeof(((CPIO_NEWC_HEADER *)0)->mode), XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
+        listResult.append({"UID", (qint32)offsetof(CPIO_NEWC_HEADER, uid), (qint32)sizeof(((CPIO_NEWC_HEADER *)0)->uid), XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
+        listResult.append({"GID", (qint32)offsetof(CPIO_NEWC_HEADER, gid), (qint32)sizeof(((CPIO_NEWC_HEADER *)0)->gid), XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
+        listResult.append({"Nlink", (qint32)offsetof(CPIO_NEWC_HEADER, nlink), (qint32)sizeof(((CPIO_NEWC_HEADER *)0)->nlink), XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
+        listResult.append({"MTime", (qint32)offsetof(CPIO_NEWC_HEADER, mtime), (qint32)sizeof(((CPIO_NEWC_HEADER *)0)->mtime), XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
+        listResult.append({"Filesize", (qint32)offsetof(CPIO_NEWC_HEADER, filesize), (qint32)sizeof(((CPIO_NEWC_HEADER *)0)->filesize), XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
+        listResult.append({"DevMajor", (qint32)offsetof(CPIO_NEWC_HEADER, devmajor), (qint32)sizeof(((CPIO_NEWC_HEADER *)0)->devmajor), XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
+        listResult.append({"DevMinor", (qint32)offsetof(CPIO_NEWC_HEADER, devminor), (qint32)sizeof(((CPIO_NEWC_HEADER *)0)->devminor), XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
+        listResult.append({"RDevMajor", (qint32)offsetof(CPIO_NEWC_HEADER, rdevmajor), (qint32)sizeof(((CPIO_NEWC_HEADER *)0)->rdevmajor), XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
+        listResult.append({"RDevMinor", (qint32)offsetof(CPIO_NEWC_HEADER, rdevminor), (qint32)sizeof(((CPIO_NEWC_HEADER *)0)->rdevminor), XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
+        listResult.append({"Namesize", (qint32)offsetof(CPIO_NEWC_HEADER, namesize), (qint32)sizeof(((CPIO_NEWC_HEADER *)0)->namesize), XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
+        listResult.append({"Check", (qint32)offsetof(CPIO_NEWC_HEADER, check), (qint32)sizeof(((CPIO_NEWC_HEADER *)0)->check), XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
+    } else if (nStructID == STRUCTID_ODC_HEADER) {
+        listResult.append({"Magic", (qint32)offsetof(CPIO_ODC_HEADER, magic), (qint32)sizeof(((CPIO_ODC_HEADER *)0)->magic), XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
+        listResult.append({"Device", (qint32)offsetof(CPIO_ODC_HEADER, dev), (qint32)sizeof(((CPIO_ODC_HEADER *)0)->dev), XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
+        listResult.append({"Inode", (qint32)offsetof(CPIO_ODC_HEADER, ino), (qint32)sizeof(((CPIO_ODC_HEADER *)0)->ino), XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
+        listResult.append({"Mode", (qint32)offsetof(CPIO_ODC_HEADER, mode), (qint32)sizeof(((CPIO_ODC_HEADER *)0)->mode), XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
+        listResult.append({"UID", (qint32)offsetof(CPIO_ODC_HEADER, uid), (qint32)sizeof(((CPIO_ODC_HEADER *)0)->uid), XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
+        listResult.append({"GID", (qint32)offsetof(CPIO_ODC_HEADER, gid), (qint32)sizeof(((CPIO_ODC_HEADER *)0)->gid), XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
+        listResult.append({"Nlink", (qint32)offsetof(CPIO_ODC_HEADER, nlink), (qint32)sizeof(((CPIO_ODC_HEADER *)0)->nlink), XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
+        listResult.append({"RDev", (qint32)offsetof(CPIO_ODC_HEADER, rdev), (qint32)sizeof(((CPIO_ODC_HEADER *)0)->rdev), XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
+        listResult.append({"MTime", (qint32)offsetof(CPIO_ODC_HEADER, mtime), (qint32)sizeof(((CPIO_ODC_HEADER *)0)->mtime), XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
+        listResult.append({"Namesize", (qint32)offsetof(CPIO_ODC_HEADER, namesize), (qint32)sizeof(((CPIO_ODC_HEADER *)0)->namesize), XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
+        listResult.append({"Filesize", (qint32)offsetof(CPIO_ODC_HEADER, filesize), (qint32)sizeof(((CPIO_ODC_HEADER *)0)->filesize), XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
+    } else if (nStructID == STRUCTID_BINARY_HEADER) {
+        listResult.append({"Magic", (qint32)offsetof(CPIO_BINARY_HEADER, magic), 2, XFRECORD_FLAG_NONE, VT_UINT16});
+        listResult.append({"Device", (qint32)offsetof(CPIO_BINARY_HEADER, dev), 2, XFRECORD_FLAG_NONE, VT_UINT16});
+        listResult.append({"Inode", (qint32)offsetof(CPIO_BINARY_HEADER, ino), 2, XFRECORD_FLAG_NONE, VT_UINT16});
+        listResult.append({"Mode", (qint32)offsetof(CPIO_BINARY_HEADER, mode), 2, XFRECORD_FLAG_NONE, VT_UINT16});
+        listResult.append({"UID", (qint32)offsetof(CPIO_BINARY_HEADER, uid), 2, XFRECORD_FLAG_NONE, VT_UINT16});
+        listResult.append({"GID", (qint32)offsetof(CPIO_BINARY_HEADER, gid), 2, XFRECORD_FLAG_NONE, VT_UINT16});
+        listResult.append({"Nlink", (qint32)offsetof(CPIO_BINARY_HEADER, nlink), 2, XFRECORD_FLAG_NONE, VT_UINT16});
+        listResult.append({"RDev", (qint32)offsetof(CPIO_BINARY_HEADER, rdev), 2, XFRECORD_FLAG_NONE, VT_UINT16});
+        listResult.append({"MTimeHigh", (qint32)offsetof(CPIO_BINARY_HEADER, mtimeHigh), 2, XFRECORD_FLAG_NONE, VT_UINT16});
+        listResult.append({"MTimeLow", (qint32)offsetof(CPIO_BINARY_HEADER, mtimeLow), 2, XFRECORD_FLAG_NONE, VT_UINT16});
+        listResult.append({"Namesize", (qint32)offsetof(CPIO_BINARY_HEADER, namesize), 2, XFRECORD_FLAG_COUNT, VT_UINT16});
+        listResult.append({"FilesizeHigh", (qint32)offsetof(CPIO_BINARY_HEADER, filesizeHigh), 2, XFRECORD_FLAG_NONE, VT_UINT16});
+        listResult.append({"FilesizeLow", (qint32)offsetof(CPIO_BINARY_HEADER, filesizeLow), 2, XFRECORD_FLAG_NONE, VT_UINT16});
+    }
+
+    return listResult;
+}
+
 QList<XBinary::FPART> XCPIO::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
 {
     QList<FPART> listResult;

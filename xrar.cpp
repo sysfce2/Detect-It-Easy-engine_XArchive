@@ -24,12 +24,12 @@
 #include <QBuffer>
 
 static XBinary::XCONVERT _TABLE_XRAR_STRUCTID[] = {{XRar::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
-                                                   {XRar::STRUCTID_RAR14_SIGNATURE, "RAR14_SIGNATURE", QString("RAR 1.4 signature")},
-                                                   {XRar::STRUCTID_RAR40_SIGNATURE, "RAR40_SIGNATURE", QString("RAR 4.0 signature")},
-                                                   {XRar::STRUCTID_RAR50_SIGNATURE, "RAR50_SIGNATURE", QString("RAR 5.0 signature)")},
-                                                   {XRar::STRUCTID_RAR14_HEADER, "RAR14_HEADER", QString("RAR 1.4 header")},
-                                                   {XRar::STRUCTID_RAR40_HEADER, "RAR40_HEADER", QString("RAR 4.0 header")},
-                                                   {XRar::STRUCTID_RAR50_HEADER, "RAR50_HEADER", QString("RAR 5.0 header")}};
+                                                   {XRar::STRUCTID_RAR14_SIGNATURE, "RAR1.4SIGNATURE", QString("RAR 1.4 signature")},
+                                                   {XRar::STRUCTID_RAR40_SIGNATURE, "RAR4.0SIGNATURE", QString("RAR 4.0 signature")},
+                                                   {XRar::STRUCTID_RAR50_SIGNATURE, "RAR5.0SIGNATURE", QString("RAR 5.0 signature")},
+                                                   {XRar::STRUCTID_RAR14_HEADER, "RAR1.4HEADER", QString("RAR 1.4 header")},
+                                                   {XRar::STRUCTID_RAR40_HEADER, "RAR4.0HEADER", QString("RAR 4.0 header")},
+                                                   {XRar::STRUCTID_RAR50_HEADER, "RAR5.0HEADER", QString("RAR 5.0 header")}};
 
 XRar::XRar(QIODevice *pDevice) : XArchive(pDevice)
 {
@@ -330,6 +330,189 @@ QString XRar::structIDToFtString(quint32 nID)
 quint32 XRar::ftStringToStructID(const QString &sFtString)
 {
     return XCONVERT_ftStringToId(sFtString, _TABLE_XRAR_STRUCTID, sizeof(_TABLE_XRAR_STRUCTID) / sizeof(XBinary::XCONVERT));
+}
+
+QList<XBinary::XFHEADER> XRar::getXFHeaders(const XFSTRUCT &xfStruct, PDSTRUCT *pPdStruct)
+{
+    QList<XBinary::XFHEADER> listResult;
+
+    quint32 nStructID = xfStruct.nStructID;
+
+    if (nStructID == STRUCTID_UNKNOWN) {
+        qint32 nVersion = getInternVersion(pPdStruct);
+        quint32 nSigID = STRUCTID_UNKNOWN;
+        qint64 nSigSize = 0;
+
+        if (nVersion == 1) { nSigID = STRUCTID_RAR14_SIGNATURE; nSigSize = 4; }
+        else if (nVersion == 4) { nSigID = STRUCTID_RAR40_SIGNATURE; nSigSize = 7; }
+        else if (nVersion == 5) { nSigID = STRUCTID_RAR50_SIGNATURE; nSigSize = 8; }
+
+        if (nSigID != STRUCTID_UNKNOWN) {
+            XFSTRUCT _xfStruct = xfStruct;
+            _xfStruct.nStructID = nSigID;
+            _xfStruct.xLoc = offsetToLoc(0);
+            listResult.append(getXFHeaders(_xfStruct, pPdStruct));
+        }
+    } else if ((nStructID == STRUCTID_RAR40_SIGNATURE) || (nStructID == STRUCTID_RAR14_SIGNATURE) || (nStructID == STRUCTID_RAR50_SIGNATURE)) {
+        qint64 nOffset = locToOffset(xfStruct.pMemoryMap, xfStruct.xLoc);
+        if (nOffset == -1) nOffset = 0;
+
+        qint64 nSigSize = (nStructID == STRUCTID_RAR50_SIGNATURE) ? 8 : (nStructID == STRUCTID_RAR14_SIGNATURE) ? 4 : 7;
+
+        XFHEADER xfHeader = {};
+        xfHeader.sParentTag = xfStruct.sParent;
+        xfHeader.fileType = xfStruct.fileType;
+        xfHeader.structID = static_cast<XBinary::STRUCTID>(nStructID);
+        xfHeader.xLoc = xfStruct.xLoc;
+        xfHeader.nSize = nSigSize;
+        xfHeader.xfType = XFTYPE_HEADER;
+        xfHeader.listFields = getXFRecords(xfStruct.fileType, nStructID, xfStruct.xLoc);
+        xfHeader.sTag = xfHeaderToTag(xfHeader, structIDToString(nStructID), xfHeader.sParentTag);
+        listResult.append(xfHeader);
+
+        if (xfStruct.bIsParent && (nStructID == STRUCTID_RAR40_SIGNATURE)) {
+            // Enumerate RAR4 block offsets for the table
+            qint64 nCurrentOffset = nSigSize;
+            qint64 nTotalSize = getSize();
+            QList<XADDR> listBlockOffsets;
+
+            while (XBinary::isPdStructNotCanceled(pPdStruct)) {
+                if (nCurrentOffset >= nTotalSize - (qint64)sizeof(GENERICBLOCK4)) break;
+
+                GENERICBLOCK4 block = readGenericBlock4(nCurrentOffset);
+                if (block.nHeaderSize == 0 || block.nType < 0x72 || block.nType > 0x7B) break;
+
+                listBlockOffsets.append(nCurrentOffset);
+
+                if (block.nType == BLOCKTYPE4_FILE) {
+                    FILEBLOCK4 fileBlock4 = readFileBlock4(nCurrentOffset);
+                    qint64 nPackSize = fileBlock4.packSize;
+                    if (fileBlock4.genericBlock4.nFlags & RAR4_FILE_LARGE)
+                        nPackSize |= ((qint64)fileBlock4.highPackSize << 32);
+                    nCurrentOffset += block.nHeaderSize + nPackSize;
+                } else {
+                    nCurrentOffset += block.nHeaderSize;
+                }
+
+                if (block.nType == BLOCKTYPE4_END) break;
+            }
+
+            if (!listBlockOffsets.isEmpty()) {
+                XFHEADER xfTable = {};
+                xfTable.sParentTag = xfHeader.sTag;
+                xfTable.fileType = xfStruct.fileType;
+                xfTable.structID = static_cast<XBinary::STRUCTID>(STRUCTID_RAR40_HEADER);
+                xfTable.xLoc = offsetToLoc(listBlockOffsets.first());
+                xfTable.xfType = XFTYPE_TABLE;
+                xfTable.listFields = getXFRecords(xfStruct.fileType, STRUCTID_RAR40_HEADER, xfTable.xLoc);
+                xfTable.listRowLocations = listBlockOffsets;
+                xfTable.sTag = xfHeaderToTag(xfTable, structIDToString(STRUCTID_RAR40_HEADER), xfTable.sParentTag);
+                listResult.append(xfTable);
+            }
+        } else if (xfStruct.bIsParent && (nStructID == STRUCTID_RAR50_SIGNATURE)) {
+            // Enumerate RAR5 block offsets
+            qint64 nCurrentOffset = nSigSize;
+            qint64 nTotalSize = getSize();
+            QList<XADDR> listHeaderOffsets;
+
+            while (XBinary::isPdStructNotCanceled(pPdStruct)) {
+                if (nCurrentOffset >= nTotalSize) break;
+                GENERICHEADER5 hdr = readGenericHeader5(nCurrentOffset);
+                if (hdr.nHeaderSize == 0 || hdr.nType < 1 || hdr.nType > 5) break;
+                listHeaderOffsets.append(nCurrentOffset);
+                nCurrentOffset += hdr.nHeaderSize + hdr.nDataSize;
+                if (hdr.nType == HEADERTYPE5_ENDARC || hdr.nType == HEADERTYPE5_ENCRYPTION) break;
+            }
+
+            if (!listHeaderOffsets.isEmpty()) {
+                XFHEADER xfTable = {};
+                xfTable.sParentTag = xfHeader.sTag;
+                xfTable.fileType = xfStruct.fileType;
+                xfTable.structID = static_cast<XBinary::STRUCTID>(STRUCTID_RAR50_HEADER);
+                xfTable.xLoc = offsetToLoc(listHeaderOffsets.first());
+                xfTable.xfType = XFTYPE_TABLE;
+                xfTable.listFields = getXFRecords(xfStruct.fileType, STRUCTID_RAR50_HEADER, xfTable.xLoc);
+                xfTable.listRowLocations = listHeaderOffsets;
+                xfTable.sTag = xfHeaderToTag(xfTable, structIDToString(STRUCTID_RAR50_HEADER), xfTable.sParentTag);
+                listResult.append(xfTable);
+            }
+        }
+    } else if ((nStructID == STRUCTID_RAR40_HEADER) || (nStructID == STRUCTID_RAR50_HEADER)) {
+        // Direct lookup: xLoc = first block offset, nCount = number of blocks
+        qint64 nStartOffset = locToOffset(xfStruct.pMemoryMap, xfStruct.xLoc);
+        qint32 nCount = xfStruct.nCount;
+
+        if ((nStartOffset != -1) && (nCount > 0)) {
+            QList<XADDR> listOffsets;
+            qint64 nCurrentOffset = nStartOffset;
+            qint64 nTotalSize = getSize();
+
+            if (nStructID == STRUCTID_RAR40_HEADER) {
+                for (qint32 i = 0; i < nCount; i++) {
+                    if (nCurrentOffset >= nTotalSize - (qint64)sizeof(GENERICBLOCK4)) break;
+                    GENERICBLOCK4 block = readGenericBlock4(nCurrentOffset);
+                    if (block.nHeaderSize == 0 || block.nType < 0x72 || block.nType > 0x7B) break;
+                    listOffsets.append(nCurrentOffset);
+                    if (block.nType == BLOCKTYPE4_FILE) {
+                        FILEBLOCK4 fb4 = readFileBlock4(nCurrentOffset);
+                        qint64 nPackSize = fb4.packSize;
+                        if (fb4.genericBlock4.nFlags & RAR4_FILE_LARGE)
+                            nPackSize |= ((qint64)fb4.highPackSize << 32);
+                        nCurrentOffset += block.nHeaderSize + nPackSize;
+                    } else {
+                        nCurrentOffset += block.nHeaderSize;
+                    }
+                    if (block.nType == BLOCKTYPE4_END) break;
+                }
+            } else {
+                for (qint32 i = 0; i < nCount; i++) {
+                    if (nCurrentOffset >= nTotalSize) break;
+                    GENERICHEADER5 hdr = readGenericHeader5(nCurrentOffset);
+                    if (hdr.nHeaderSize == 0 || hdr.nType < 1 || hdr.nType > 5) break;
+                    listOffsets.append(nCurrentOffset);
+                    nCurrentOffset += hdr.nHeaderSize + hdr.nDataSize;
+                    if (hdr.nType == HEADERTYPE5_ENDARC || hdr.nType == HEADERTYPE5_ENCRYPTION) break;
+                }
+            }
+
+            if (!listOffsets.isEmpty()) {
+                XFHEADER xfTable = {};
+                xfTable.sParentTag = xfStruct.sParent;
+                xfTable.fileType = xfStruct.fileType;
+                xfTable.structID = static_cast<XBinary::STRUCTID>(nStructID);
+                xfTable.xLoc = xfStruct.xLoc;
+                xfTable.xfType = XFTYPE_TABLE;
+                xfTable.listFields = getXFRecords(xfStruct.fileType, nStructID, xfStruct.xLoc);
+                xfTable.listRowLocations = listOffsets;
+                xfTable.sTag = xfHeaderToTag(xfTable, structIDToString(nStructID), xfTable.sParentTag);
+                listResult.append(xfTable);
+            }
+        }
+    }
+
+    return listResult;
+}
+
+QList<XBinary::XFRECORD> XRar::getXFRecords(FT fileType, quint32 nStructID, const XLOC &xLoc)
+{
+    Q_UNUSED(fileType)
+    Q_UNUSED(xLoc)
+
+    QList<XBinary::XFRECORD> listResult;
+
+    if ((nStructID == STRUCTID_RAR40_SIGNATURE) || (nStructID == STRUCTID_RAR14_SIGNATURE) || (nStructID == STRUCTID_RAR50_SIGNATURE)) {
+        qint32 nSigSize = (nStructID == STRUCTID_RAR50_SIGNATURE) ? 8 : (nStructID == STRUCTID_RAR14_SIGNATURE) ? 4 : 7;
+        listResult.append({"Signature", 0, nSigSize, XFRECORD_FLAG_NONE, VT_BYTE_ARRAY});
+    } else if (nStructID == STRUCTID_RAR40_HEADER) {
+        listResult.append({"CRC16",      0, 2, XFRECORD_FLAG_NONE, VT_UINT16});
+        listResult.append({"Type",       2, 1, XFRECORD_FLAG_NONE, VT_UINT8});
+        listResult.append({"Flags",      3, 2, XFRECORD_FLAG_NONE, VT_UINT16});
+        listResult.append({"HeaderSize", 5, 2, XFRECORD_FLAG_SIZE, VT_UINT16});
+    } else if (nStructID == STRUCTID_RAR50_HEADER) {
+        listResult.append({"CRC32", 0, 4, XFRECORD_FLAG_NONE, VT_UINT32});
+    }
+
+    return listResult;
 }
 
 qint32 XRar::readTableRow(qint32 nRow, LT locType, XADDR nLocation, const DATA_RECORDS_OPTIONS &dataRecordsOptions, QList<DATA_RECORD_ROW> *pListDataRecords,

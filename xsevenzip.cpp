@@ -54,6 +54,23 @@ XBinary::XIDSTRING _TABLE_XSevenZip_EIdEnum[] = {
     {XSevenZip::k7zIdDummy, "Dummy"},
 };
 
+static const XBinary::XFIXEDFIELD _TABLE_XSevenZip_STRUCTID_SIGNATUREHEADER[] = {
+    {"kSignature", (qint32)offsetof(XSevenZip::SIGNATUREHEADER, kSignature), (qint32)sizeof(((XSevenZip::SIGNATUREHEADER *)0)->kSignature),
+     XBinary::XFRECORD_FLAG_NONE, XBinary::VT_BYTE_ARRAY},
+    {"Major", (qint32)offsetof(XSevenZip::SIGNATUREHEADER, Major), (qint32)sizeof(((XSevenZip::SIGNATUREHEADER *)0)->Major),
+     XBinary::XFRECORD_FLAG_VERSION_MAJOR, XBinary::VT_UINT8},
+    {"Minor", (qint32)offsetof(XSevenZip::SIGNATUREHEADER, Minor), (qint32)sizeof(((XSevenZip::SIGNATUREHEADER *)0)->Minor),
+     XBinary::XFRECORD_FLAG_VERSION_MINOR, XBinary::VT_UINT8},
+    {"StartHeaderCRC", (qint32)offsetof(XSevenZip::SIGNATUREHEADER, StartHeaderCRC), (qint32)sizeof(((XSevenZip::SIGNATUREHEADER *)0)->StartHeaderCRC),
+     XBinary::XFRECORD_FLAG_NONE, XBinary::VT_UINT32},
+    {"NextHeaderOffset", (qint32)offsetof(XSevenZip::SIGNATUREHEADER, NextHeaderOffset), (qint32)sizeof(((XSevenZip::SIGNATUREHEADER *)0)->NextHeaderOffset),
+     XBinary::XFRECORD_FLAG_RELATIVE_OFFSET, XBinary::VT_UINT64},
+    {"NextHeaderSize", (qint32)offsetof(XSevenZip::SIGNATUREHEADER, NextHeaderSize), (qint32)sizeof(((XSevenZip::SIGNATUREHEADER *)0)->NextHeaderSize),
+     XBinary::XFRECORD_FLAG_SIZE, XBinary::VT_UINT64},
+    {"NextHeaderCRC", (qint32)offsetof(XSevenZip::SIGNATUREHEADER, NextHeaderCRC), (qint32)sizeof(((XSevenZip::SIGNATUREHEADER *)0)->NextHeaderCRC),
+     XBinary::XFRECORD_FLAG_NONE, XBinary::VT_UINT32},
+};
+
 const QString XSevenZip::PREFIX_k7zId = "k7zId";
 
 QMap<quint64, QString> XSevenZip::get_k7zId()
@@ -570,13 +587,8 @@ QList<XBinary::XFRECORD> XSevenZip::getXFRecords(FT fileType, quint32 nStructID,
     QList<XBinary::XFRECORD> listResult;
 
     if (nStructID == STRUCTID_SIGNATUREHEADER) {
-        listResult.append({"kSignature", (qint32)offsetof(SIGNATUREHEADER, kSignature), 6, XFRECORD_FLAG_NONE, VT_BYTE_ARRAY});
-        listResult.append({"Major", (qint32)offsetof(SIGNATUREHEADER, Major), 1, XFRECORD_FLAG_VERSION_MAJOR, VT_UINT8});
-        listResult.append({"Minor", (qint32)offsetof(SIGNATUREHEADER, Minor), 1, XFRECORD_FLAG_VERSION_MINOR, VT_UINT8});
-        listResult.append({"StartHeaderCRC", (qint32)offsetof(SIGNATUREHEADER, StartHeaderCRC), 4, XFRECORD_FLAG_NONE, VT_UINT32});
-        listResult.append({"NextHeaderOffset", (qint32)offsetof(SIGNATUREHEADER, NextHeaderOffset), 8, XFRECORD_FLAG_RELATIVE_OFFSET, VT_UINT64});
-        listResult.append({"NextHeaderSize", (qint32)offsetof(SIGNATUREHEADER, NextHeaderSize), 8, XFRECORD_FLAG_SIZE, VT_UINT64});
-        listResult.append({"NextHeaderCRC", (qint32)offsetof(SIGNATUREHEADER, NextHeaderCRC), 4, XFRECORD_FLAG_NONE, VT_UINT32});
+        listResult = XBinary::XFIXEDFIELD_toXFRecords(_TABLE_XSevenZip_STRUCTID_SIGNATUREHEADER,
+                                                      sizeof(_TABLE_XSevenZip_STRUCTID_SIGNATUREHEADER) / sizeof(XBinary::XFIXEDFIELD));
     }
 
     return listResult;
