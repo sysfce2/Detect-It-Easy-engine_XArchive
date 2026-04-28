@@ -2234,6 +2234,41 @@ QList<XBinary::XFHEADER> XZip::getXFHeaders(const XFSTRUCT &xfStruct, PDSTRUCT *
             xfHeaderLFH.sTag = xfHeaderToTag(xfHeaderLFH, structIDToString(STRUCTID_LOCALFILEHEADER), xfHeaderLFH.sParentTag);
             listResult.append(xfHeaderLFH);
         }
+    } else if (nStructID == STRUCTID_LOCALFILEHEADER) {
+        // Direct lookup: xLoc = CDH start, nCount = number of entries
+        qint64 nCdhOffset = locToOffset(xfStruct.pMemoryMap, xfStruct.xLoc);
+        qint32 nCount = xfStruct.nCount;
+        qint64 nFileSize = getSize();
+
+        if ((nCdhOffset != -1) && (nCount > 0)) {
+            XFHEADER xfHeaderLFH = {};
+            xfHeaderLFH.sParentTag = xfStruct.sParent;
+            xfHeaderLFH.fileType = xfStruct.fileType;
+            xfHeaderLFH.structID = static_cast<XBinary::STRUCTID>(STRUCTID_LOCALFILEHEADER);
+            xfHeaderLFH.xLoc = xfStruct.xLoc;
+            xfHeaderLFH.xfType = XFTYPE_TABLE;
+            xfHeaderLFH.listDataSt.append({0, 0, XFDATASTYPE_LIST, _TABLE_XZip_HeaderSignatures, sizeof(_TABLE_XZip_HeaderSignatures) / sizeof(XBinary::XIDSTRING)});
+            xfHeaderLFH.listDataSt.append({2, 0, XFDATASTYPE_LIST, _TABLE_XZip_OS, sizeof(_TABLE_XZip_OS) / sizeof(XBinary::XIDSTRING)});
+            xfHeaderLFH.listDataSt.append({3, 0xFFFF, XFDATASTYPE_FLAGS, _TABLE_XZip_FLAGS, sizeof(_TABLE_XZip_FLAGS) / sizeof(XBinary::XIDSTRING)});
+            xfHeaderLFH.listDataSt.append({4, 0, XFDATASTYPE_LIST, _TABLE_XZip_CMETHOD, sizeof(_TABLE_XZip_CMETHOD) / sizeof(XBinary::XIDSTRING)});
+
+            qint64 nCurrentCdh = nCdhOffset;
+            for (qint32 i = 0; i < nCount; i++) {
+                if ((nCurrentCdh + (qint64)sizeof(CENTRALDIRECTORYFILEHEADER)) > nFileSize) {
+                    break;
+                }
+                CENTRALDIRECTORYFILEHEADER cdh = read_CENTRALDIRECTORYFILEHEADER(nCurrentCdh, pPdStruct);
+                xfHeaderLFH.listRowLocations.append(cdh.nOffsetToLocalFileHeader);
+                nCurrentCdh += sizeof(CENTRALDIRECTORYFILEHEADER) + cdh.nFileNameLength + cdh.nExtraFieldLength + cdh.nFileCommentLength;
+            }
+
+            if (!xfHeaderLFH.listRowLocations.isEmpty()) {
+                qint64 nFirstLfh = xfHeaderLFH.listRowLocations.first();
+                xfHeaderLFH.listFields = getXFRecords(xfStruct.fileType, STRUCTID_LOCALFILEHEADER, offsetToLoc(nFirstLfh));
+                xfHeaderLFH.sTag = xfHeaderToTag(xfHeaderLFH, structIDToString(STRUCTID_LOCALFILEHEADER), xfHeaderLFH.sParentTag);
+                listResult.append(xfHeaderLFH);
+            }
+        }
     }
 
     return listResult;
