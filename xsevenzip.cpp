@@ -523,6 +523,65 @@ QList<XBinary::DATA_HEADER> XSevenZip::getDataHeaders(const DATA_HEADERS_OPTIONS
     return listResult;
 }
 
+QList<XBinary::XFHEADER> XSevenZip::getXFHeaders(const XFSTRUCT &xfStruct, PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(pPdStruct)
+
+    QList<XBinary::XFHEADER> listResult;
+
+    quint32 nStructID = xfStruct.nStructID;
+
+    if (nStructID == STRUCTID_UNKNOWN) {
+        XFSTRUCT _xfStruct = xfStruct;
+        _xfStruct.nStructID = STRUCTID_SIGNATUREHEADER;
+        _xfStruct.xLoc = offsetToLoc(0);
+
+        listResult.append(getXFHeaders(_xfStruct, pPdStruct));
+    } else if (nStructID == STRUCTID_SIGNATUREHEADER) {
+        XLOC headerLoc = xfStruct.xLoc;
+        if (headerLoc.locType == LT_UNKNOWN) {
+            headerLoc = offsetToLoc(0);
+        }
+        qint64 nHeaderOffset = locToOffset(xfStruct.pMemoryMap, headerLoc);
+
+        if ((nHeaderOffset != -1) && isOffsetAndSizeValid(xfStruct.pMemoryMap, nHeaderOffset, sizeof(SIGNATUREHEADER))) {
+            XFHEADER xfHeader = {};
+            xfHeader.sParentTag = xfStruct.sParent;
+            xfHeader.fileType = xfStruct.fileType;
+            xfHeader.structID = static_cast<XBinary::STRUCTID>(STRUCTID_SIGNATUREHEADER);
+            xfHeader.xLoc = headerLoc;
+            xfHeader.nSize = sizeof(SIGNATUREHEADER);
+            xfHeader.xfType = XFTYPE_HEADER;
+            xfHeader.listFields = getXFRecords(xfStruct.fileType, STRUCTID_SIGNATUREHEADER, headerLoc);
+            xfHeader.sTag = xfHeaderToTag(xfHeader, structIDToString(STRUCTID_SIGNATUREHEADER), xfHeader.sParentTag);
+
+            listResult.append(xfHeader);
+        }
+    }
+
+    return listResult;
+}
+
+QList<XBinary::XFRECORD> XSevenZip::getXFRecords(FT fileType, quint32 nStructID, const XLOC &xLoc)
+{
+    Q_UNUSED(fileType)
+    Q_UNUSED(xLoc)
+
+    QList<XBinary::XFRECORD> listResult;
+
+    if (nStructID == STRUCTID_SIGNATUREHEADER) {
+        listResult.append({"kSignature", (qint32)offsetof(SIGNATUREHEADER, kSignature), 6, XFRECORD_FLAG_NONE, VT_BYTE_ARRAY});
+        listResult.append({"Major", (qint32)offsetof(SIGNATUREHEADER, Major), 1, XFRECORD_FLAG_VERSION_MAJOR, VT_UINT8});
+        listResult.append({"Minor", (qint32)offsetof(SIGNATUREHEADER, Minor), 1, XFRECORD_FLAG_VERSION_MINOR, VT_UINT8});
+        listResult.append({"StartHeaderCRC", (qint32)offsetof(SIGNATUREHEADER, StartHeaderCRC), 4, XFRECORD_FLAG_NONE, VT_UINT32});
+        listResult.append({"NextHeaderOffset", (qint32)offsetof(SIGNATUREHEADER, NextHeaderOffset), 8, XFRECORD_FLAG_RELATIVE_OFFSET, VT_UINT64});
+        listResult.append({"NextHeaderSize", (qint32)offsetof(SIGNATUREHEADER, NextHeaderSize), 8, XFRECORD_FLAG_SIZE, VT_UINT64});
+        listResult.append({"NextHeaderCRC", (qint32)offsetof(SIGNATUREHEADER, NextHeaderCRC), 4, XFRECORD_FLAG_NONE, VT_UINT32});
+    }
+
+    return listResult;
+}
+
 QList<XBinary::FPART> XSevenZip::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(nLimit)
