@@ -1115,9 +1115,6 @@ bool XZip::_isRecordNamePresent(qint64 nECDOffset, QString sRecordName1, QString
             nNumberOfRecords = qMin(nNumberOfRecords, nLimit);
         }
 
-        qint32 nFreeIndex = XBinary::getFreeIndex(pPdStruct);
-        XBinary::setPdStructInit(pPdStruct, nFreeIndex, nNumberOfRecords);
-
         qint64 nOffset = read_uint32(nECDOffset + offsetof(ENDOFCENTRALDIRECTORYRECORD, nOffsetToCentralDirectory));
 
         for (qint32 i = 0; i < (nNumberOfRecords) && XBinary::isPdStructNotCanceled(pPdStruct); i++) {
@@ -1161,11 +1158,7 @@ bool XZip::_isRecordNamePresent(qint64 nECDOffset, QString sRecordName1, QString
             }
 
             nOffset += (sizeof(CENTRALDIRECTORYFILEHEADER) + cdh.nFileNameLength + cdh.nExtraFieldLength + cdh.nFileCommentLength);
-
-            XBinary::setPdStructCurrent(pPdStruct, nFreeIndex, i);
         }
-
-        XBinary::setPdStructFinished(pPdStruct, nFreeIndex);
     } else {
         // if no ECD, only the first record
         qint32 nNumberOfRecords = nLimit;
