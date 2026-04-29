@@ -94,9 +94,6 @@ bool XSevenZip::isValid(PDSTRUCT *pPdStruct)
     if (getSize() > (qint64)sizeof(SIGNATUREHEADER)) {
         _MEMORY_MAP memoryMap = XBinary::getMemoryMap(MAPMODE_UNKNOWN, pPdStruct);
         bool bSignatureValid = compareSignature(&memoryMap, "'7z'BCAF271C", 0, pPdStruct);
-#ifdef QT_DEBUG
-        qDebug("XSevenZip::isValid: compareSignature result: %d", bSignatureValid);
-#endif
 
         if (bSignatureValid) {
             // More checks
@@ -113,15 +110,8 @@ bool XSevenZip::isValid(PDSTRUCT *pPdStruct)
             qDebug("XSevenZip::isValid: isOffsetAndSizeValid(offset=%lld, size=%lld) result: %d", nOffset, nSize, bResult);
 #endif
         }
-    } else {
-#ifdef QT_DEBUG
-        qDebug("XSevenZip::isValid: File size is too small (%lld bytes)", getSize());
-#endif
     }
 
-#ifdef QT_DEBUG
-    qDebug("XSevenZip::isValid: Final result: %d", bResult);
-#endif
     return bResult;
 }
 
