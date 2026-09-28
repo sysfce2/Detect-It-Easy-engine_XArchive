@@ -22,7 +22,11 @@
 
 #include <QBuffer>
 #include <QTemporaryFile>
+#if (QT_VERSION < QT_VERSION_CHECK(6, 0, 0)) || defined(QT_CORE5COMPAT_LIB)
 #include <QTextCodec>
+#else
+#include <QStringDecoder>
+#endif
 #include <QtEndian>
 #include <cstring>
 #include <new>
@@ -60,8 +64,13 @@ bool isNameByteAllowed(uchar nByte)
 
 QString decodeMemberName(const QByteArray &baName)
 {
+#if (QT_VERSION < QT_VERSION_CHECK(6, 0, 0)) || defined(QT_CORE5COMPAT_LIB)
     QTextCodec *pCodec = QTextCodec::codecForName("Shift-JIS");
     QString sName = pCodec ? pCodec->toUnicode(baName) : QString::fromLatin1(baName);
+#else
+    QStringDecoder decoder("Shift-JIS", QStringConverter::Flag::Stateless);
+    QString sName = decoder.isValid() ? QString(decoder(baName)) : QString::fromLatin1(baName);
+#endif
     sName.replace(QLatin1Char('\\'), QLatin1Char('/'));
     return sName;
 }
